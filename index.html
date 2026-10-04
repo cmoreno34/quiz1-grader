@@ -75,7 +75,7 @@ a{color:var(--accent)}
     <ol>
       <li>Entra en <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> ▸ <b>Settings ▸ Workspaces</b> ▸ crea un espacio “Corrector” y ponle un <b>límite de gasto mensual</b> (p. ej. 10 $).</li>
       <li>Dentro de ese espacio: <b>API Keys ▸ Create Key</b>. Copia la clave (empieza por <code>sk-ant-</code>).</li>
-      <li>Pégala abajo con una contraseña: se guarda <b>cifrada</b> en este navegador. Las próximas veces solo escribes la contraseña.</li>
+      <li>Pégala abajo una vez: se guarda <b>cifrada</b> en este navegador y ya no se vuelve a pedir.</li>
       <li>Coste orientativo: unos 0,10–0,20 $ por alumno. Los Excel no salen de tu ordenador: a Claude solo se envía el informe de evidencias de cada alumno.</li>
     </ol>
   </details>
@@ -93,16 +93,14 @@ a{color:var(--accent)}
         <div id="keyNew">
           <label for="key">Clave de la API de Anthropic</label>
           <input type="password" id="key" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
-          <label for="pass" style="margin-top:10px">Contraseña para guardarla cifrada</label>
-          <input type="password" id="pass" placeholder="mínimo 6 caracteres" autocomplete="new-password">
-          <label class="check"><input type="checkbox" id="remember" checked> Guardar la clave cifrada (AES-256) en este navegador</label>
+          <label class="check"><input type="checkbox" id="remember" checked> Guardarla en este navegador (cifrada; no vuelve a pedirse)</label>
         </div>
         <div id="keySaved" hidden>
-          <label for="unlockPass">🔒 Clave guardada (cifrada). Escribe tu contraseña</label>
+          <label for="unlockPass">🔒 Tu clave está guardada con la contraseña de la versión anterior. Escríbela una última vez: a partir de ahora se abrirá sola</label>
           <div class="row"><input type="password" id="unlockPass" style="flex:1" autocomplete="current-password"><button class="ghost" id="unlock">Desbloquear</button></div>
-          <div class="sub" style="margin-top:6px"><a href="#" id="forget">Borrar la clave guardada</a></div>
+          <div class="sub" style="margin-top:6px"><a href="#" id="forget">No la recuerdo: pegar la clave de nuevo</a></div>
         </div>
-        <div id="keyReady" hidden><span class="badge b-ok">✓ Clave lista para esta sesión</span> <a href="#" id="lock" class="sub">bloquear</a></div>
+        <div id="keyReady" hidden><span class="badge b-ok">✓ Clave guardada en este navegador</span> <a href="#" id="lock" class="sub">borrarla</a></div>
         <div class="err" id="keyErr"></div>
         <label class="check"><input type="checkbox" id="regrade"> Volver a corregir a todos (si no, solo los que faltan)</label>
         <div class="row" style="margin-top:16px">
@@ -152,6 +150,6 @@ a{color:var(--accent)}
 
 <div id="tip"></div>
 <div class="modal" id="modal"><div class="sheet"><div class="row"><div class="grow"></div><button class="ghost small" id="closeModal">Cerrar ✕</button></div><div id="md"></div></div></div>
-<script type="module" src="js/app.js?v=2"></script>
+<script type="module" src="js/app.js?v=3"></script>
 </body>
 </html>

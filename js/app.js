@@ -13,50 +13,75 @@ const S = {zipName: "", items: [], ref: null, decisions: {}, results: [], usage:
 window.__q1 = S;                                   // handy for debugging in the console
 window.__q1load = f => loadZip(f);
 
-// ------------------------------------------------------------------ encrypted key storage
-const KEY_SLOT = "q1web.key";
+// ------------------------------------------------------------------ saved key (no password)
+// The key is encrypted (AES-256-GCM) with a device key that this browser generates once and
+// keeps as a NON-extractable CryptoKey in IndexedDB: nothing readable is stored and the page
+// unlocks it by itself.  Old versions used a password (slot q1web.key): migrated once.
+const SLOT = "q1web.key2", OLD_SLOT = "q1web.key";
 const enc = new TextEncoder(), dec = new TextDecoder();
 const b64 = buf => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-async function derive(pass, salt) {
+const store = (mode, fn) => new Promise((res, rej) => {
+  const open = indexedDB.open("q1web", 1);
+  open.onupgradeneeded = () => open.result.createObjectStore("k");
+  open.onerror = () => rej(open.error);
+  open.onsuccess = () => { const r = fn(open.result.transaction("k", mode).objectStore("k")); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); };
+});
+async function deviceKey() {
+  let k = await store("readonly", s => s.get("dev"));
+  if (!k) { k = await crypto.subtle.generateKey({name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]); await store("readwrite", s => s.put(k, "dev")); }
+  return k;
+}
+async function saveKey(key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({name: "AES-GCM", iv}, await deviceKey(), enc.encode(key));
+  localStorage.setItem(SLOT, JSON.stringify({iv: b64(iv), ct: b64(ct)}));
+}
+async function loadSavedKey() {
+  try {
+    const o = JSON.parse(localStorage.getItem(SLOT) || "null");
+    if (!o) return "";
+    return dec.decode(await crypto.subtle.decrypt({name: "AES-GCM", iv: unb64(o.iv)}, await deviceKey(), unb64(o.ct)));
+  } catch (e) { return ""; }
+}
+async function loadOldKey(pass) {        // password format of the first version
+  const o = JSON.parse(localStorage.getItem(OLD_SLOT));
   const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey({name: "PBKDF2", salt, iterations: 310000, hash: "SHA-256"}, base, {name: "AES-GCM", length: 256}, false, ["encrypt", "decrypt"]);
-}
-async function saveKey(key, pass) {
-  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({name: "AES-GCM", iv}, await derive(pass, salt), enc.encode(key));
-  localStorage.setItem(KEY_SLOT, JSON.stringify({salt: b64(salt), iv: b64(iv), ct: b64(ct)}));
-}
-async function loadKey(pass) {
-  const o = JSON.parse(localStorage.getItem(KEY_SLOT));
-  try { return dec.decode(await crypto.subtle.decrypt({name: "AES-GCM", iv: unb64(o.iv)}, await derive(pass, unb64(o.salt)), unb64(o.ct))); }
+  const k = await crypto.subtle.deriveKey({name: "PBKDF2", salt: unb64(o.salt), iterations: 310000, hash: "SHA-256"}, base, {name: "AES-GCM", length: 256}, false, ["decrypt"]);
+  try { return dec.decode(await crypto.subtle.decrypt({name: "AES-GCM", iv: unb64(o.iv)}, k, unb64(o.ct))); }
   catch (e) { throw new Error("Contraseña incorrecta"); }
 }
-const hasSavedKey = () => { try { return !!localStorage.getItem(KEY_SLOT); } catch (e) { return false; } };
+const hasOld = () => { try { return !!localStorage.getItem(OLD_SLOT); } catch (e) { return false; } };
 let sessionKey = "";
 function renderKey() {
-  const saved = hasSavedKey();
-  $("#keyNew").hidden = saved || !!sessionKey; $("#keySaved").hidden = !saved || !!sessionKey; $("#keyReady").hidden = !sessionKey;
+  $("#keyNew").hidden = !!sessionKey || hasOld();
+  $("#keySaved").hidden = !!sessionKey || !hasOld();
+  $("#keyReady").hidden = !sessionKey;
 }
 $("#unlock").onclick = async () => {
   $("#keyErr").textContent = "";
-  try { sessionKey = await loadKey($("#unlockPass").value); $("#unlockPass").value = ""; renderKey(); refreshButtons(); }
-  catch (e) { $("#keyErr").textContent = e.message; }
+  try {
+    sessionKey = await loadOldKey($("#unlockPass").value);
+    await saveKey(sessionKey); localStorage.removeItem(OLD_SLOT);
+    $("#unlockPass").value = ""; renderKey(); refreshButtons();
+  } catch (e) { $("#keyErr").textContent = e.message; }
 };
 $("#unlockPass").addEventListener("keydown", e => { if (e.key === "Enter") $("#unlock").click(); });
-$("#forget").onclick = e => { e.preventDefault(); if (!confirm("¿Borrar la clave guardada en este navegador?")) return; localStorage.removeItem(KEY_SLOT); sessionKey = ""; renderKey(); refreshButtons(); };
-$("#lock").onclick = e => { e.preventDefault(); sessionKey = ""; renderKey(); refreshButtons(); };
+$("#forget").onclick = e => { e.preventDefault(); localStorage.removeItem(OLD_SLOT); renderKey(); };
+$("#lock").onclick = e => {
+  e.preventDefault();
+  if (!confirm("¿Borrar la clave guardada en este navegador? Tendrás que pegarla otra vez.")) return;
+  localStorage.removeItem(SLOT); sessionKey = ""; renderKey(); refreshButtons();
+};
 async function keyFromForm() {
   if (sessionKey) return sessionKey;
-  const key = $("#key").value.trim(), pass = $("#pass").value;
+  const key = $("#key").value.trim();
   if (!/^sk-ant-/.test(key)) throw new Error("Pega tu clave: empieza por sk-ant-");
-  if ($("#remember").checked) {
-    if (pass.length < 6) throw new Error("Elige una contraseña de al menos 6 caracteres para guardar la clave cifrada");
-    await saveKey(key, pass);
-  }
-  sessionKey = key; $("#key").value = ""; $("#pass").value = ""; renderKey();
+  if ($("#remember").checked) { try { await saveKey(key); } catch (e) { /* private window: keep it for this session only */ } }
+  sessionKey = key; $("#key").value = ""; renderKey();
   return key;
 }
+loadSavedKey().then(k => { if (k) { sessionKey = k; renderKey(); refreshButtons(); } });
 
 // ------------------------------------------------------------------ read the Canvas zip
 const drop = $("#drop");
