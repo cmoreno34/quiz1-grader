@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corrector Quiz 1</title>
+<meta name="robots" content="noindex">
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--ink:#1d2433;--muted:#667085;--line:#e4e7ef;--accent:#4f46e5;--accent-ink:#fff;--accent-soft:#eef0ff;
+--ok:#15803d;--ok-bg:#dcfce7;--mid:#a16207;--mid-bg:#fef3c7;--bad:#b91c1c;--bad-bg:#fee2e2;--nil:#98a2b3;--nil-bg:#f2f4f7;--shadow:0 1px 2px rgba(16,24,40,.06),0 4px 16px rgba(16,24,40,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1320;--card:#171c2b;--ink:#e7eaf3;--muted:#98a2b3;--line:#2a3145;--accent:#818cf8;--accent-ink:#0f1320;--accent-soft:#232a45;
+--ok:#4ade80;--ok-bg:#12351f;--mid:#fbbf24;--mid-bg:#3a2e0d;--bad:#f87171;--bad-bg:#3d1717;--nil:#667085;--nil-bg:#1f2536;--shadow:none}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 "Segoe UI",system-ui,-apple-system,Roboto,sans-serif}
+header{background:var(--card);border-bottom:1px solid var(--line)}
+.bar{max-width:1180px;margin:0 auto;padding:14px 20px;display:flex;align-items:center;gap:14px}
+.logo{width:40px;height:40px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700}
+h1{font-size:18px;margin:0}.sub{color:var(--muted);font-size:13px}.grow{flex:1}
+main{max-width:1180px;margin:0 auto;padding:20px;display:grid;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow)}
+.card h2{font-size:16px;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+.step{width:24px;height:24px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:13px;font-weight:700}
+.hint{color:var(--muted);font-size:13px;margin:0 0 14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media (max-width:860px){.two{grid-template-columns:1fr}}
+.drop{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;cursor:pointer;transition:.15s;min-height:160px;display:grid;place-items:center}
+.drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}.drop b{display:block}.drop .icon{font-size:30px;line-height:1;margin-bottom:6px}
+label{font-size:13px;font-weight:600;display:block;margin:0 0 6px}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+input:focus{outline:2px solid var(--accent);border-color:transparent}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.check{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin-top:10px;font-weight:400}
+button{font:inherit;border:0;border-radius:10px;padding:10px 16px;cursor:pointer;font-weight:600}
+.primary{background:var(--accent);color:var(--accent-ink)}.primary:disabled,.ghost:disabled{opacity:.45;cursor:not-allowed}
+.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}.ghost:hover{background:var(--nil-bg)}
+.small{padding:6px 10px;font-size:13px;border-radius:8px}
+.badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600}
+.b-ok{background:var(--ok-bg);color:var(--ok)}.b-mid{background:var(--mid-bg);color:var(--mid)}.b-bad{background:var(--bad-bg);color:var(--bad)}.b-nil{background:var(--nil-bg);color:var(--muted)}
+.steps{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+.pill{padding:6px 12px;border-radius:999px;background:var(--nil-bg);color:var(--muted);font-size:13px;font-weight:600}
+.pill.on{background:var(--accent-soft);color:var(--accent)}.pill.done{background:var(--ok-bg);color:var(--ok)}
+.progress{height:10px;background:var(--nil-bg);border-radius:999px;overflow:hidden}.progress>div{height:100%;background:var(--accent);width:0;transition:width .4s}
+.status{margin-top:10px;font-size:14px}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin:4px 0 16px}
+.stat{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 14px;min-width:110px}.stat b{display:block;font-size:20px}.stat span{color:var(--muted);font-size:12px}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:12px;padding:8px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:9px 6px;border-bottom:1px solid var(--line);vertical-align:middle}tr:hover td{background:var(--bg)}
+.name{font-weight:600;white-space:nowrap}.grade{font-weight:700;font-size:15px;padding:3px 10px;border-radius:8px}
+.cells,.qh{display:flex;gap:3px}.qh span{width:30px;text-align:center}
+.c{width:30px;height:28px;border-radius:6px;display:grid;place-items:center;font-size:12px;font-weight:700;cursor:pointer}
+.c.ok{background:var(--ok-bg);color:var(--ok)}.c.mid{background:var(--mid-bg);color:var(--mid)}.c.bad{background:var(--bad-bg);color:var(--bad)}.c.nil{background:var(--nil-bg);color:var(--nil)}
+#tip{position:fixed;max-width:380px;background:var(--ink);color:var(--card);padding:10px 12px;border-radius:10px;font-size:13px;pointer-events:none;opacity:0;transition:opacity .1s;z-index:20}
+.empty{color:var(--muted);text-align:center;padding:30px}
+.modal{position:fixed;inset:0;background:rgba(10,14,25,.55);display:none;align-items:flex-start;justify-content:center;padding:40px 16px;z-index:30;overflow:auto}.modal.open{display:flex}
+.sheet{background:var(--card);border-radius:16px;max-width:900px;width:100%;padding:24px 28px;border:1px solid var(--line)}
+.sheet h1{font-size:20px;margin-bottom:8px}.sheet h2{font-size:16px;margin:22px 0 6px;padding-top:12px;border-top:1px solid var(--line)}
+.sheet td,.sheet th{font-size:13px}.sheet pre{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;white-space:pre-wrap;overflow:auto}
+.err{color:var(--bad);font-size:13px;margin-top:8px}.ok-txt{color:var(--ok)}
+details.help{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 20px}
+details.help summary{cursor:pointer;font-weight:600}details.help ol{margin:10px 0 0;padding-left:20px;font-size:14px}details.help li{margin:4px 0}
+.dl{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+a{color:var(--accent)}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<header><div class="bar">
+  <div class="logo">Q1</div>
+  <div><h1>Corrector del Quiz 1</h1><div class="sub">BTM-2500 · corrección con agente (Claude) · todo se procesa en este navegador</div></div>
+</div></header>
+
+<main>
+  <details class="help">
+    <summary>Antes de empezar: la clave de Claude con límite de gasto (una sola vez)</summary>
+    <ol>
+      <li>Entra en <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> ▸ <b>Settings ▸ Workspaces</b> ▸ crea un espacio “Corrector” y ponle un <b>límite de gasto mensual</b> (p. ej. 10 $).</li>
+      <li>Dentro de ese espacio: <b>API Keys ▸ Create Key</b>. Copia la clave (empieza por <code>sk-ant-</code>).</li>
+      <li>Pégala abajo con una contraseña: se guarda <b>cifrada</b> en este navegador. Las próximas veces solo escribes la contraseña.</li>
+      <li>Coste orientativo: unos 0,10–0,20 $ por alumno. Los Excel no salen de tu ordenador: a Claude solo se envía el informe de evidencias de cada alumno.</li>
+    </ol>
+  </details>
+
+  <section class="card">
+    <h2><span class="step">1</span>Entregas y clave</h2>
+    <p class="hint">Arrastra el zip de Canvas (tarea ▸ <i>Download Submissions</i>), desbloquea tu clave y pulsa Corregir.</p>
+    <div class="two">
+      <div>
+        <div class="drop" id="drop"><div><div class="icon">📦</div><b id="dropTitle">Arrastra aquí el zip de Canvas</b><span class="sub" id="dropSub">o haz clic para elegirlo</span></div></div>
+        <input type="file" id="file" accept=".zip" hidden>
+        <div class="err" id="zipErr"></div>
+      </div>
+      <div>
+        <div id="keyNew">
+          <label for="key">Clave de la API de Anthropic</label>
+          <input type="password" id="key" placeholder="sk-ant-..." autocomplete="off" spellcheck="false">
+          <label for="pass" style="margin-top:10px">Contraseña para guardarla cifrada</label>
+          <input type="password" id="pass" placeholder="mínimo 6 caracteres" autocomplete="new-password">
+          <label class="check"><input type="checkbox" id="remember" checked> Guardar la clave cifrada (AES-256) en este navegador</label>
+        </div>
+        <div id="keySaved" hidden>
+          <label for="unlockPass">🔒 Clave guardada (cifrada). Escribe tu contraseña</label>
+          <div class="row"><input type="password" id="unlockPass" style="flex:1" autocomplete="current-password"><button class="ghost" id="unlock">Desbloquear</button></div>
+          <div class="sub" style="margin-top:6px"><a href="#" id="forget">Borrar la clave guardada</a></div>
+        </div>
+        <div id="keyReady" hidden><span class="badge b-ok">✓ Clave lista para esta sesión</span> <a href="#" id="lock" class="sub">bloquear</a></div>
+        <div class="err" id="keyErr"></div>
+        <label class="check"><input type="checkbox" id="regrade"> Volver a corregir a todos (si no, solo los que faltan)</label>
+        <div class="row" style="margin-top:16px">
+          <button class="primary" id="goAgent" disabled>Corregir con el agente</button>
+          <button class="ghost" id="goRules" disabled title="Gratis: solo el motor automático">Notas automáticas sin IA</button>
+        </div>
+        <div class="sub" id="goHint" style="margin-top:8px"></div>
+        <div class="err" id="gradeErr"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card" id="progCard" hidden>
+    <h2><span class="step">⏳</span>Progreso</h2>
+    <div class="steps" id="steps"></div>
+    <div class="progress"><div id="bar"></div></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">2</span>Resultados <span class="sub" id="resNote"></span></h2>
+    <p class="hint">Pasa el ratón por una casilla para ver el comentario que recibe el alumno; clic para la justificación completa.</p>
+    <div class="stats" id="stats"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Alumno</th><th>Nota</th><th><div class="qh">
+        <span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span><span>Q5</span><span>Q6</span><span>Q7</span><span>Q8</span><span>Q9</span><span>Q10</span><span>Q11</span><span>Q12</span><span>Q13</span><span>Q14</span>
+      </div></th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </section>
+
+  <section class="card">
+    <h2><span class="step">3</span>Descargar y subir a Canvas</h2>
+    <p class="hint">1) En Canvas, en la tarea: <b>Re-Upload Submissions</b> ▸ sube el zip de Excel corregidos (cada alumno lo recibe como comentario). 2) En <b>Grades ▸ Import</b> ▸ sube el CSV de notas.</p>
+    <div class="row">
+      <div style="flex:2;min-width:180px"><label for="asgName">Nombre de la tarea en Canvas</label><input type="text" id="asgName" value="Quiz 1"></div>
+      <div style="flex:1;min-width:120px"><label for="asgId">ID de la tarea (opcional)</label><input type="text" id="asgId" placeholder="98765"></div>
+      <div style="flex:1;min-width:100px"><label for="asgPts">Puntos</label><input type="number" id="asgPts" value="100"></div>
+    </div>
+    <div class="dl">
+      <button class="primary" id="dlExcel" disabled>⬇ Zip con todos los Excel corregidos</button>
+      <button class="ghost" id="dlCsv" disabled>⬇ CSV de notas para Canvas</button>
+      <button class="ghost" id="dlAll" disabled>⬇ Informe completo (justificaciones)</button>
+    </div>
+  </section>
+</main>
+
+<div id="tip"></div>
+<div class="modal" id="modal"><div class="sheet"><div class="row"><div class="grow"></div><button class="ghost small" id="closeModal">Cerrar ✕</button></div><div id="md"></div></div></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
