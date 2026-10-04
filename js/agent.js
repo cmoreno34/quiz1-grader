@@ -2,23 +2,24 @@
 // instructor's own key.  One conversation per student (evidence + rubric, read-only
 // read_cells tool on the student's workbook, structured JSON answer), then one calibration
 // call across the class.  Port of _tools/grade_quiz1.py.
-import {RUBRIC} from "./rubric.js";
+import {RUBRIC} from "./rubric.js?v=2";
 
 export const MODEL = "claude-opus-5-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const VERDICTS = ["correct", "minor", "carried_forward", "partial", "major", "hardcoded", "manual", "error", "blank"];
-const QSCHEMA = {type: "object", properties: {score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
-  comment: {type: "string"}, basis: {type: "string"}}, required: ["score", "verdict", "comment", "basis"], additionalProperties: false};
+// one compact item schema repeated in an array: a schema with 14 named properties compiles
+// into a grammar the API rejects as too large
+const QITEM = {type: "object", properties: {q: {type: "integer"}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
+  comment: {type: "string"}, basis: {type: "string"}}, required: ["q", "score", "verdict", "comment", "basis"], additionalProperties: false};
 const QKEYS = Array.from({length: 14}, (_, i) => String(i + 1));
-const DECISION_SCHEMA = {type: "object", properties: {
-  questions: {type: "object", properties: Object.fromEntries(QKEYS.map(k => [k, QSCHEMA])), required: QKEYS, additionalProperties: false},
-  summary: {type: "string"}}, required: ["questions", "summary"], additionalProperties: false};
+const DECISION_SCHEMA = {type: "object", properties: {questions: {type: "array", items: QITEM}, summary: {type: "string"}},
+  required: ["questions", "summary"], additionalProperties: false};
 const CALIB_SCHEMA = {type: "object", properties: {
   changes: {type: "array", items: {type: "object", properties: {student: {type: "string"}, question: {type: "integer"},
     score: {type: "number"}, verdict: {type: "string", enum: VERDICTS}, comment: {type: "string"}, basis: {type: "string"}},
     required: ["student", "question", "score", "verdict", "comment", "basis"], additionalProperties: false}},
   notes: {type: "string"}}, required: ["changes", "notes"], additionalProperties: false};
-const READ_TOOL = {name: "read_cells", strict: true,
+const READ_TOOL = {name: "read_cells",
   description: "Read the student's sheet 'Data&Q' (read-only). Returns the formula and the cached value of every non-empty cell in an A1 range (at most 300 cells). Use it only to check something the evidence leaves unclear, e.g. 'B145:B155' or 'Q26:X46'.",
   input_schema: {type: "object", properties: {range: {type: "string", description: "A1 range such as B145:B155"}}, required: ["range"], additionalProperties: false}};
 
@@ -28,7 +29,7 @@ For each student you receive an evidence packet produced by the grading engine. 
 
 Decide Q1-Q14 with the rubric below. Start from the engine's proposal: keep it when it fits the rubric, change it when the evidence shows the rules misread the case (hand-tailored formula shapes, a fixed-position MID that is right only by coincidence, an IFERROR that hard-codes a value, a correct answer in a nearby cell, conditions borrowed from data cells, ...). If something is unclear, call read_cells on the student's workbook before deciding.
 
-Write \`basis\` for the instructor: one short sentence with the evidence behind the mark (always; it is the justification kept on file). Write \`comment\` for the student exactly as the rubric's comment rules say. Return only the JSON object.
+Write \`basis\` for the instructor: one short sentence with the evidence behind the mark (always; it is the justification kept on file). Write \`comment\` for the student exactly as the rubric's comment rules say. Return only the JSON object: "questions" is a list with exactly one item per question, q = 1 to 14.
 
 ===== RUBRIC =====
 `;
@@ -45,7 +46,9 @@ async function call(client, {model, effort, schema, system, messages, tools}) {
 }
 
 function validate(d) {
-  const qs = d.questions || {};
+  const qs = {};
+  for (const it of Array.isArray(d.questions) ? d.questions : []) qs[String(it.q)] = it;
+  d.questions = qs;
   for (const k of QKEYS) {
     const q = qs[k];
     if (!q) throw new Error(`missing Q${k}`);

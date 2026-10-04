@@ -2,8 +2,8 @@
 // edited (points 0-10 coloured, a 'comment' column right beside them, GRADE /100 and the
 // overall summary).  String-level XML edits: every other part of the file is copied as is.
 // Port of write_workbook() in _tools/quiz1_agent.py.
-import {colLetter as COL, colIndex as CIDX, unescapeXml} from "./xlsx.js";
-import {num, close, evidenceMd} from "./engine.js";
+import {colLetter as COL, colIndex as CIDX, unescapeXml} from "./xlsx.js?v=2";
+import {num, close, evidenceMd} from "./engine.js?v=2";
 
 const GREEN = "FFC6EFCE", AMBER = "FFFFEB9C", RED = "FFFFC7CE";
 const esc = s => String(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")

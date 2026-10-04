@@ -4,7 +4,7 @@
 // wrong / blank / #error), finds answers placed elsewhere, traces references, matches
 // typical mistakes and writes a rule-based proposal per question.  No answers are stored
 // here: they are computed from the submissions themselves.
-import {XDate, excelDate, colIndex as CIDX, colLetter as COL} from "./xlsx.js";
+import {XDate, excelDate, colIndex as CIDX, colLetter as COL} from "./xlsx.js?v=2";
 
 export const SHEET = "Data&Q";
 export const EXAMPLE = 4, FIRST = 5, LAST = 183;
