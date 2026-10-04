@@ -9,7 +9,7 @@ const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const VERDICTS = ["correct", "minor", "carried_forward", "partial", "major", "hardcoded", "manual", "error", "blank"];
 // one compact item schema repeated in an array: a schema with 14 named properties compiles
 // into a grammar the API rejects as too large
-const QITEM = {type: "object", properties: {q: {type: "integer"}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
+const QITEM = {type: "object", properties: {q: {type: "integer", enum: Array.from({length: 14}, (_, i) => i + 1)}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
   comment: {type: "string"}, basis: {type: "string"}}, required: ["q", "score", "verdict", "comment", "basis"], additionalProperties: false};
 const QKEYS = Array.from({length: 14}, (_, i) => String(i + 1));
 const DECISION_SCHEMA = {type: "object", properties: {questions: {type: "array", items: QITEM}, summary: {type: "string"}},
@@ -66,9 +66,9 @@ export const usageOf = r => ({input_tokens: r.usage?.input_tokens || 0, output_t
 export async function gradeStudent(client, {model = MODEL, effort = "high", system, evidenceMd, file, readCells, onEvent = () => {}}) {
   const first = {role: "user", content: `Student workbook: ${file}\n\n${evidenceMd}\n\nGrade Q1-Q14 now.`};
   let lastErr = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const messages = [first], toolCalls = [], usage = [];
-    let resp;
+  const messages = [first], toolCalls = [], usage = [];
+  let resp;
+  for (let attempt = 0; attempt < 3; attempt++) {
     for (let turn = 0; turn < 10; turn++) {
       resp = await call(client, {model, effort, schema: DECISION_SCHEMA, system, messages, tools: [READ_TOOL]});
       usage.push(usageOf(resp));
@@ -93,9 +93,14 @@ export async function gradeStudent(client, {model = MODEL, effort = "high", syst
       const d = validate(JSON.parse(text));
       d._meta = {model: resp.model, effort, graded_at: new Date().toISOString().slice(0, 19), tool_calls: toolCalls, usage};
       return d;
-    } catch (e) { lastErr = e; effort = "medium"; }
+    } catch (e) {
+      lastErr = e;
+      // same conversation: show the model what was wrong and ask for the full answer
+      messages.push({role: "assistant", content: resp.content});
+      messages.push({role: "user", content: `That answer is not usable (${e.message}). Return the complete JSON again: "questions" must contain exactly 14 items, one for each q = 1 to 14, plus "summary".`});
+    }
   }
-  throw new Error("no valid decision after 2 attempts: " + (lastErr?.message || ""));
+  throw new Error("no valid decision after 3 attempts: " + (lastErr?.message || ""));
 }
 
 export function calibrationGroups(evidences, decisions) {

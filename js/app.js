@@ -3,7 +3,7 @@ import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.131.0";
 import {readWorkbook, colIndex, colLetter} from "./xlsx.js?v=2";
 import {buildReference, buildEvidence, evidenceMd, expectedSummary, show, proposalTotal} from "./engine.js?v=2";
 import {writeWorkbook, justificationMd, toCsv} from "./writer.js?v=2";
-import {MODEL, systemBlocks, gradeStudent, calibrate, costOf} from "./agent.js?v=2";
+import {MODEL, systemBlocks, gradeStudent, calibrate, costOf} from "./agent.js?v=3";
 
 const JSZip = window.JSZip;
 const $ = s => document.querySelector(s);
