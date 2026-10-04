@@ -152,6 +152,7 @@ function progress(step, pct, text) {
   $("#bar").style.width = pct + "%"; $("#status").innerHTML = text;
 }
 
+const DL_SHORTCUT = '<div class="dl"><button class="primary" onclick="document.querySelector(\'#dlExcel\').click()">⬇ Zip con todos los Excel corregidos</button><button class="ghost" onclick="document.querySelector(\'#dlCsv\').click()">⬇ CSV de notas</button></div>';
 $("#goAgent").onclick = async () => {
   $("#gradeErr").textContent = "";
   let key;
@@ -190,7 +191,7 @@ $("#goAgent").onclick = async () => {
     progress(3, 95, "Escribiendo los Excel corregidos y las justificaciones…");
     await buildOutputs("final");
     const cal = S.calibration?.changes?.length ? ` · ${S.calibration.changes.length} nota(s) igualadas en la calibración` : "";
-    progress(4, 100, `<span class="ok-txt">✓ Corregidos ${Object.keys(S.decisions).length} alumnos${cal} · coste aprox. ${costOf(S.usage).toFixed(2)} $</span>` +
+    progress(4, 100, `<span class="ok-txt">✓ Corregidos ${Object.keys(S.decisions).length} alumnos${cal} · coste aprox. ${costOf(S.usage).toFixed(2)} $</span>` + DL_SHORTCUT +
       (failed.length ? `<div class="err">Sin agente (propuesta automática): ${esc(failed.join(" · "))}</div>` : ""));
     S.downloaded = false;
   } catch (e) { progress(1, 100, `<span class="err">${esc(e.message)}</span>`); }
@@ -198,12 +199,14 @@ $("#goAgent").onclick = async () => {
 };
 $("#goRules").onclick = async () => {
   if (!confirm("Esto pone las notas automáticas del motor, sin el agente (gratis). ¿Continuar?")) return;
-  S.decisions = {}; await buildOutputs("final"); progress(4, 100, '<span class="ok-txt">✓ Notas automáticas (sin IA) listas para revisar y descargar.</span>'); S.downloaded = false; refreshButtons();
+  S.decisions = {}; await buildOutputs("final"); progress(4, 100, '<span class="ok-txt">✓ Notas automáticas (sin IA) listas para revisar y descargar.</span>' + DL_SHORTCUT); S.downloaded = false; refreshButtons();
 };
 function refreshButtons() {
   const ready = S.items.length > 0 && !S.running;
   $("#goAgent").disabled = !ready; $("#goRules").disabled = !ready;
-  for (const id of ["dlExcel", "dlCsv", "dlAll"]) $("#" + id).disabled = !S.results.length || S.running;
+  const files = S.mode === "final" && S.results.some(r => r.bytes);
+  for (const id of ["dlExcel", "dlCsv", "dlAll"]) $("#" + id).disabled = !files || S.running;
+  $("#dlHint").textContent = files ? "" : "Los archivos aparecen al terminar la corrección (o al pulsar «Notas automáticas sin IA»).";
   $("#goHint").textContent = S.running ? "Corrigiendo…" : S.items.length ? `${S.items.length} entregas listas` : "Primero arrastra el zip";
 }
 
