@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Corrector Quiz 1</title>
+<title>Corrector BTM-2500</title>
 <meta name="robots" content="noindex">
 <style>
 :root{--bg:#f6f7fb;--card:#fff;--ink:#1d2433;--muted:#667085;--line:#e4e7ef;--accent:#4f46e5;--accent-ink:#fff;--accent-soft:#eef0ff;
@@ -25,7 +25,7 @@ main{max-width:1180px;margin:0 auto;padding:20px;display:grid;gap:18px}
 .drop{border:2px dashed var(--line);border-radius:14px;padding:26px;text-align:center;cursor:pointer;transition:.15s;min-height:160px;display:grid;place-items:center}
 .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft)}.drop b{display:block}.drop .icon{font-size:30px;line-height:1;margin-bottom:6px}
 label{font-size:13px;font-weight:600;display:block;margin:0 0 6px}
-input[type=text],input[type=password],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
+input[type=text],input[type=password],input[type=number],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:inherit}
 input:focus{outline:2px solid var(--accent);border-color:transparent}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .check{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--muted);margin-top:10px;font-weight:400}
@@ -66,7 +66,7 @@ a{color:var(--accent)}
 <body>
 <header><div class="bar">
   <div class="logo">Q1</div>
-  <div><h1>Corrector del Quiz 1</h1><div class="sub">BTM-2500 · corrección con agente (Claude) · todo se procesa en este navegador</div></div>
+  <div><h1>Corrector BTM-2500 · <span id="asgNow">Quiz 1</span></h1><div class="sub">Quiz 1 y Homework 1 · corrección con agente (Claude) · todo se procesa en este navegador</div></div>
 </div></header>
 
 <main>
@@ -83,6 +83,7 @@ a{color:var(--accent)}
   <section class="card">
     <h2><span class="step">1</span>Entregas y clave</h2>
     <p class="hint">Arrastra el zip de Canvas (tarea ▸ <i>Download Submissions</i>), desbloquea tu clave y pulsa Corregir.</p>
+    <div style="max-width:320px;margin-bottom:12px"><label for="asgSel">Tarea</label><select id="asgSel"><option value="auto">Detectar automáticamente</option><option value="quiz1">Quiz 1 (sports, hoja Data&amp;Q)</option><option value="hw1">Homework 1 (hoja quiz1#)</option></select></div>
     <div class="two">
       <div>
         <div class="drop" id="drop"><div><div class="icon">📦</div><b id="dropTitle">Arrastra aquí el zip de Canvas</b><span class="sub" id="dropSub">o haz clic para elegirlo</span></div></div>
@@ -125,9 +126,7 @@ a{color:var(--accent)}
     <p class="hint">Pasa el ratón por una casilla para ver el comentario que recibe el alumno; clic para la justificación completa.</p>
     <div class="stats" id="stats"></div>
     <div class="table-wrap"><table>
-      <thead><tr><th>Alumno</th><th>Nota</th><th><div class="qh">
-        <span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span><span>Q5</span><span>Q6</span><span>Q7</span><span>Q8</span><span>Q9</span><span>Q10</span><span>Q11</span><span>Q12</span><span>Q13</span><span>Q14</span>
-      </div></th><th></th></tr></thead>
+      <thead><tr><th>Alumno</th><th>Nota</th><th><div class="qh" id="qh"></div></th><th></th></tr></thead>
       <tbody id="rows"></tbody>
     </table></div>
   </section>
@@ -151,6 +150,6 @@ a{color:var(--accent)}
 
 <div id="tip"></div>
 <div class="modal" id="modal"><div class="sheet"><div class="row"><div class="grow"></div><button class="ghost small" id="closeModal">Cerrar ✕</button></div><div id="md"></div></div></div>
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>

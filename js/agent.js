@@ -1,27 +1,34 @@
 // agent.js -- the grading agent: Claude (Anthropic API) called from the browser with the
 // instructor's own key.  One conversation per student (evidence + rubric, read-only
 // read_cells tool on the student's workbook, structured JSON answer), then one calibration
-// call across the class.  Port of _tools/grade_quiz1.py.
-import {RUBRIC} from "./rubric.js?v=2";
+// call across the class.  Port of _tools/grade_quiz1.py.  Quiz 1 is the default; other
+// assignments (Homework 1) pass cfg = {nq, sheet, instructions, rubric, withFix, example}.
+import {RUBRIC} from "./rubric.js?v=4";
 
 export const MODEL = "claude-opus-5-5";
 const FALLBACK_BETA = "server-side-fallback-2026-07-01";
 const VERDICTS = ["correct", "minor", "carried_forward", "partial", "major", "hardcoded", "manual", "error", "blank"];
 // one compact item schema repeated in an array: a schema with 14 named properties compiles
 // into a grammar the API rejects as too large
-const QITEM = {type: "object", properties: {q: {type: "integer", enum: Array.from({length: 14}, (_, i) => i + 1)}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
-  comment: {type: "string"}, basis: {type: "string"}}, required: ["q", "score", "verdict", "comment", "basis"], additionalProperties: false};
-const QKEYS = Array.from({length: 14}, (_, i) => String(i + 1));
-const DECISION_SCHEMA = {type: "object", properties: {questions: {type: "array", items: QITEM}, summary: {type: "string"}},
-  required: ["questions", "summary"], additionalProperties: false};
-const CALIB_SCHEMA = {type: "object", properties: {
-  changes: {type: "array", items: {type: "object", properties: {student: {type: "string"}, question: {type: "integer"},
-    score: {type: "number"}, verdict: {type: "string", enum: VERDICTS}, comment: {type: "string"}, basis: {type: "string"}},
-    required: ["student", "question", "score", "verdict", "comment", "basis"], additionalProperties: false}},
-  notes: {type: "string"}}, required: ["changes", "notes"], additionalProperties: false};
-const READ_TOOL = {name: "read_cells",
-  description: "Read the student's sheet 'Data&Q' (read-only). Returns the formula and the cached value of every non-empty cell in an A1 range (at most 300 cells). Use it only to check something the evidence leaves unclear, e.g. 'B145:B155' or 'Q26:X46'.",
-  input_schema: {type: "object", properties: {range: {type: "string", description: "A1 range such as B145:B155"}}, required: ["range"], additionalProperties: false}};
+function decisionSchema(nq, withFix) {
+  const props = {q: {type: "integer", enum: Array.from({length: nq}, (_, i) => i + 1)}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS},
+    comment: {type: "string"}, basis: {type: "string"}};
+  const req = ["q", "score", "verdict", "comment", "basis"];
+  if (withFix) { props.fix = {type: "string"}; req.push("fix"); }
+  return {type: "object", properties: {questions: {type: "array", items: {type: "object", properties: props, required: req, additionalProperties: false}}, summary: {type: "string"}},
+    required: ["questions", "summary"], additionalProperties: false};
+}
+function calibSchema(withFix) {
+  const props = {student: {type: "string"}, question: {type: "integer"}, score: {type: "number"}, verdict: {type: "string", enum: VERDICTS}, comment: {type: "string"}, basis: {type: "string"}};
+  const req = ["student", "question", "score", "verdict", "comment", "basis"];
+  if (withFix) { props.fix = {type: "string"}; req.push("fix"); }
+  return {type: "object", properties: {changes: {type: "array", items: {type: "object", properties: props, required: req, additionalProperties: false}},
+    notes: {type: "string"}}, required: ["changes", "notes"], additionalProperties: false};
+}
+const QUIZ1 = {nq: 14, sheet: "Data&Q", withFix: false, example: "'B145:B155' or 'Q26:X46'"};
+const readTool = (sheet, example) => ({name: "read_cells",
+  description: `Read the student's sheet '${sheet}' (read-only). Returns the formula and the cached value of every non-empty cell in an A1 range (at most 300 cells). Use it only to check something the evidence leaves unclear, e.g. ${example}.`,
+  input_schema: {type: "object", properties: {range: {type: "string", description: "A1 range such as B145:B155"}}, required: ["range"], additionalProperties: false}});
 
 const INSTRUCTIONS = `You are the grader of Quiz 1 (sports) of BTM-2500, an Excel course at SLU Madrid. You mark like a careful instructor: you reward correct logic, penalise each mistake once, and tell every student exactly why they lost points.
 
@@ -34,8 +41,9 @@ Write \`basis\` for the instructor: one short sentence with the evidence behind 
 ===== RUBRIC =====
 `;
 
-export function systemBlocks(expected) {
-  return [{type: "text", text: INSTRUCTIONS + RUBRIC.replace("{{EXPECTED}}", expected), cache_control: {type: "ephemeral"}}];
+export function systemBlocks(expected, cfg = null) {
+  const instructions = cfg?.instructions ?? INSTRUCTIONS, rubric = cfg?.rubric ?? RUBRIC;
+  return [{type: "text", text: instructions + rubric.replace("{{EXPECTED}}", expected), cache_control: {type: "ephemeral"}}];
 }
 
 async function call(client, {model, effort, schema, system, messages, tools}) {
@@ -45,11 +53,11 @@ async function call(client, {model, effort, schema, system, messages, tools}) {
   return client.beta.messages.create(body);
 }
 
-function validate(d) {
+function validate(d, nq) {
   const qs = {};
   for (const it of Array.isArray(d.questions) ? d.questions : []) qs[String(it.q)] = it;
   d.questions = qs;
-  for (const k of QKEYS) {
+  for (const k of Array.from({length: nq}, (_, i) => String(i + 1))) {
     const q = qs[k];
     if (!q) throw new Error(`missing Q${k}`);
     const sc = Number(q.score);
@@ -63,14 +71,16 @@ function validate(d) {
 export const usageOf = r => ({input_tokens: r.usage?.input_tokens || 0, output_tokens: r.usage?.output_tokens || 0,
   cache_read_input_tokens: r.usage?.cache_read_input_tokens || 0, cache_creation_input_tokens: r.usage?.cache_creation_input_tokens || 0});
 
-export async function gradeStudent(client, {model = MODEL, effort = "high", system, evidenceMd, file, readCells, onEvent = () => {}}) {
-  const first = {role: "user", content: `Student workbook: ${file}\n\n${evidenceMd}\n\nGrade Q1-Q14 now.`};
+export async function gradeStudent(client, {model = MODEL, effort = "high", system, evidenceMd, file, readCells, onEvent = () => {}, cfg = null}) {
+  const {nq, sheet, withFix, example} = {...QUIZ1, ...(cfg || {})};
+  const schema = decisionSchema(nq, withFix), tool = readTool(sheet, example);
+  const first = {role: "user", content: `Student workbook: ${file}\n\n${evidenceMd}\n\nGrade Q1-Q${nq} now.`};
   let lastErr = null;
   const messages = [first], toolCalls = [], usage = [];
   let resp;
   for (let attempt = 0; attempt < 3; attempt++) {
     for (let turn = 0; turn < 10; turn++) {
-      resp = await call(client, {model, effort, schema: DECISION_SCHEMA, system, messages, tools: [READ_TOOL]});
+      resp = await call(client, {model, effort, schema, system, messages, tools: [tool]});
       usage.push(usageOf(resp));
       if (resp.stop_reason === "refusal") throw new Error("the model declined this request");
       if (resp.stop_reason !== "tool_use") break;
@@ -90,14 +100,14 @@ export async function gradeStudent(client, {model = MODEL, effort = "high", syst
       if (resp.stop_reason === "max_tokens") throw new Error("answer cut at max_tokens");
       const text = resp.content.find(b => b.type === "text")?.text;
       if (!text) throw new Error("no text block in the answer");
-      const d = validate(JSON.parse(text));
+      const d = validate(JSON.parse(text), nq);
       d._meta = {model: resp.model, effort, graded_at: new Date().toISOString().slice(0, 19), tool_calls: toolCalls, usage};
       return d;
     } catch (e) {
       lastErr = e;
       // same conversation: show the model what was wrong and ask for the full answer
       messages.push({role: "assistant", content: resp.content});
-      messages.push({role: "user", content: `That answer is not usable (${e.message}). Return the complete JSON again: "questions" must contain exactly 14 items, one for each q = 1 to 14, plus "summary".`});
+      messages.push({role: "user", content: `That answer is not usable (${e.message}). Return the complete JSON again: "questions" must contain exactly ${nq} items, one for each q = 1 to ${nq}, plus "summary".`});
     }
   }
   throw new Error("no valid decision after 3 attempts: " + (lastErr?.message || ""));
@@ -116,7 +126,8 @@ export function calibrationGroups(evidences, decisions) {
   return [...groups.values()].filter(g => new Set(g.students.map(s => decisions[s].questions[String(g.q)].score)).size > 1);
 }
 
-export async function calibrate(client, {model = MODEL, system, evidences, decisions, sectionsOf}) {
+export async function calibrate(client, {model = MODEL, system, evidences, decisions, sectionsOf, cfg = null}) {
+  const withFix = !!cfg?.withFix;
   const groups = calibrationGroups(evidences, decisions);
   if (!groups.length) return {changes: [], notes: "no inconsistent group", usage: null};
   const L = ["Calibration across the whole class. Each group below holds students whose answer to one question the engine classified the same way, but who got different marks. For each group decide whether the evidence really differs. Where it is the same mistake, align the marks to the rubric and return a change (new score, verdict, student comment, and a basis starting with 'calibration:'). Where the evidence differs, keep the marks and return nothing for them. Return only real changes."];
@@ -127,7 +138,7 @@ export async function calibrate(client, {model = MODEL, system, evidences, decis
       L.push(`\n#### ${st}: mark ${dq.score} (${dq.verdict})\ncomment: ${dq.comment}\nbasis: ${dq.basis || ""}\nevidence:\n${(sectionsOf(st)[g.q] || "").slice(0, 1800)}`);
     }
   }
-  const resp = await call(client, {model, effort: "high", schema: CALIB_SCHEMA, system, messages: [{role: "user", content: L.join("\n")}]});
+  const resp = await call(client, {model, effort: "high", schema: calibSchema(withFix), system, messages: [{role: "user", content: L.join("\n")}]});
   if (resp.stop_reason === "refusal" || resp.stop_reason === "max_tokens") return {changes: [], notes: resp.stop_reason, usage: usageOf(resp)};
   const res = JSON.parse(resp.content.find(b => b.type === "text").text);
   const changes = [];
@@ -137,7 +148,7 @@ export async function calibrate(client, {model = MODEL, system, evidences, decis
     const sc = Math.round(Number(ch.score) * 2) / 2;
     if (!(sc >= 0 && sc <= 10)) continue;
     const old = d.questions[q].score;
-    Object.assign(d.questions[q], {score: sc, verdict: ch.verdict, comment: ch.comment, basis: ch.basis});
+    Object.assign(d.questions[q], {score: sc, verdict: ch.verdict, comment: ch.comment, basis: ch.basis}, withFix ? {fix: ch.fix || ""} : {});
     (d._meta.calibration ||= []).push({question: +q, old, new: sc});
     changes.push({student: ch.student, question: +q, old, new: sc, basis: ch.basis});
   }

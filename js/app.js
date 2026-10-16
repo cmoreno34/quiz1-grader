@@ -1,15 +1,32 @@
-// app.js -- page logic of the Quiz 1 grader (everything runs in this browser).
+// app.js -- page logic of the BTM-2500 grader: Quiz 1 or Homework 1, detected from the zip
+// (everything runs in this browser).
 import Anthropic from "https://esm.sh/@anthropic-ai/sdk@0.131.0";
-import {readWorkbook, colIndex, colLetter} from "./xlsx.js?v=2";
-import {buildReference, buildEvidence, evidenceMd, expectedSummary, show, proposalTotal} from "./engine.js?v=2";
-import {writeWorkbook, justificationMd, toCsv} from "./writer.js?v=2";
-import {MODEL, systemBlocks, gradeStudent, calibrate, costOf} from "./agent.js?v=3";
+import {readWorkbook, colIndex, colLetter} from "./xlsx.js?v=4";
+import * as Q1E from "./engine.js?v=4";
+import * as Q1W from "./writer.js?v=4";
+import * as HW1 from "./hw1.js?v=4";
+const {show} = Q1E, {toCsv} = Q1W;
+
+// one entry per assignment the page can grade
+const ASSIGNMENTS = {
+  quiz1: {id: "quiz1", title: "Quiz 1", sheets: "Data&Q", nq: 14, weights: Array(14).fill(1 / 14), fix: false,
+    buildReference: Q1E.buildReference, buildEvidence: Q1E.buildEvidence, evidenceMd: Q1E.evidenceMd, expectedSummary: Q1E.expectedSummary,
+    writeWorkbook: Q1W.writeWorkbook, justificationMd: Q1W.justificationMd, agent: null, zip: "Quiz_feedback_files.zip",
+    grade: f => Math.round(Array.from({length: 14}, (_, i) => f[i + 1].score).reduce((a, b) => a + b, 0) / 14 * 10 * 100) / 100},
+  hw1: {id: "hw1", title: "Homework 1", sheets: HW1.SHEETS, nq: HW1.NQ, weights: HW1.WEIGHTS, fix: true,
+    buildReference: HW1.buildReference, buildEvidence: HW1.buildEvidence, evidenceMd: HW1.evidenceMd, expectedSummary: HW1.expectedSummary,
+    writeWorkbook: HW1.writeWorkbook, justificationMd: HW1.justificationMd, zip: "Homework1_feedback_files.zip", grade: HW1.grade,
+    agent: {nq: HW1.NQ, sheet: "quiz1#", instructions: HW1.INSTRUCTIONS, rubric: HW1.RUBRIC, withFix: true, example: "'E3:E14' or 'R28:X40'"}},
+};
+let A = ASSIGNMENTS.quiz1;
+window.__asg = ASSIGNMENTS;
+import {MODEL, systemBlocks, gradeStudent, calibrate, costOf} from "./agent.js?v=4";
 
 const JSZip = window.JSZip;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const fmt = n => (Math.round(n * 100) / 100).toLocaleString("es-ES", {minimumFractionDigits: 2, maximumFractionDigits: 2});
-const S = {zipName: "", items: [], ref: null, decisions: {}, results: [], usage: [], running: false, downloaded: true};
+const S = {zipName: "", items: [], ref: null, decisions: {}, results: [], usage: [], running: false, downloaded: true, file: null};
 window.__q1 = S;                                   // handy for debugging in the console
 window.__q1load = f => loadZip(f);
 
@@ -93,21 +110,32 @@ drop.addEventListener("drop", e => { const f = e.dataTransfer.files[0]; if (f) l
 
 export async function loadZip(file) {
   $("#zipErr").textContent = ""; $("#dropTitle").textContent = "Leyendo " + file.name + "…";
+  S.file = file;
   try {
     const zip = await JSZip.loadAsync(file);
     const entries = zip.file(/\.xlsx$/i).filter(e => !/(^|\/)(~\$|__MACOSX)/.test(e.name));
     if (!entries.length) throw new Error("El zip no contiene ningún Excel (.xlsx)");
-    const items = [], errors = [];
-    for (const e of entries) {
-      const name = e.name.split("/").pop(), data = await e.async("uint8array");
-      try { items.push({file: name, data, book: await readWorkbook(JSZip, data)}); }
-      catch (err) { errors.push(`${name}: ${err.message}`); }
+    // which assignment? the one chosen in the menu, or the one whose sheet most files have
+    const files = [];
+    for (const e of entries) files.push({file: e.name.split("/").pop(), data: await e.async("uint8array")});
+    const pick = $("#asgSel").value;
+    const cands = pick === "auto" ? Object.values(ASSIGNMENTS) : [ASSIGNMENTS[pick]];
+    const tally = new Map(cands.map(a => [a.id, []]));
+    for (const f of files) for (const a of cands) {
+      try { tally.get(a.id).push({...f, book: await readWorkbook(JSZip, f.data, a.sheets)}); break; } catch (err) { /* try the next one */ }
     }
-    const ref = buildReference(items.map(x => x.book));
-    for (const it of items) it.ev = buildEvidence(it.book, ref, it.file);
+    A = cands.reduce((best, a) => tally.get(a.id).length > tally.get(best.id).length ? a : best, cands[0]);
+    const items = tally.get(A.id), errors = [];
+    for (const f of files) if (!items.some(x => x.file === f.file)) {
+      try { await readWorkbook(JSZip, f.data, A.sheets); } catch (err) { errors.push(`${f.file}: ${err.message}`); }
+    }
+    if (!items.length) throw new Error("Ningún Excel tiene la hoja de " + cands.map(a => `${a.title} ('${[].concat(a.sheets)[0]}')`).join(" ni de "));
+    const ref = A.buildReference(items.map(x => x.book));
+    for (const it of items) it.ev = A.buildEvidence(it.book, ref, it.file);
+    setAssignmentUi();
     Object.assign(S, {zipName: file.name, items, ref, decisions: {}, results: [], usage: []});
     $("#dropTitle").textContent = "✓ " + file.name;
-    $("#dropSub").textContent = `${items.length} entregas leídas` + (errors.length ? ` · ${errors.length} no se pudieron leer` : "");
+    $("#dropSub").textContent = `${A.title}: ${items.length} entregas leídas` + (errors.length ? ` · ${errors.length} no se pudieron leer` : "");
     if (errors.length) $("#zipErr").textContent = errors.join(" · ");
     buildOutputs("rules-preview");
   } catch (err) { $("#dropTitle").textContent = "Arrastra aquí el zip de Canvas"; $("#zipErr").textContent = err.message; }
@@ -120,8 +148,8 @@ function finalOf(it) {
   const final = {summary: d?.summary || ""};
   for (const q of it.ev.questions) {
     const x = d?.questions?.[String(q.q)];
-    final[q.q] = x ? {score: x.score, verdict: x.verdict, comment: x.comment, basis: x.basis || ""}
-      : {score: q.proposal.score, verdict: q.proposal.verdict, comment: q.proposal.comment, basis: ""};
+    final[q.q] = x ? {score: x.score, verdict: x.verdict, comment: x.comment, basis: x.basis || "", fix: x.fix ?? ""}
+      : {score: q.proposal.score, verdict: q.proposal.verdict, comment: q.proposal.comment, basis: "", fix: q.proposal.fix ?? ""};
   }
   return final;
 }
@@ -163,14 +191,14 @@ $("#goAgent").onclick = async () => {
     progress(1, 5, "Comprobando la clave…");
     try { await client.models.retrieve(MODEL); }
     catch (e) { throw new Error("No se pudo conectar con Claude: revisa la clave sk-ant-… y que la cuenta tenga saldo. (" + (e.status || "") + " " + (e.message || "") + ")"); }
-    const system = systemBlocks(expectedSummary(S.ref));
+    const system = systemBlocks(A.expectedSummary(S.ref), A.agent);
     const todo = S.items.filter(it => $("#regrade").checked || !S.decisions[it.ev.student]);
     let done = 0;
     progress(1, 8, `El agente está corrigiendo: 0 de ${todo.length} alumnos`);
     const failed = [];
     await pool(todo, 4, async it => {
       try {
-        const d = await gradeStudent(client, {system, evidenceMd: evidenceMd(it.ev), file: it.file, readCells: readCellsFor(it)});
+        const d = await gradeStudent(client, {system, evidenceMd: A.evidenceMd(it.ev), file: it.file, readCells: readCellsFor(it), cfg: A.agent});
         S.decisions[it.ev.student] = d; S.usage.push(...d._meta.usage);
       } catch (e) { failed.push(`${it.ev.student}: ${e.message}`); }
       done++;
@@ -181,9 +209,9 @@ $("#goAgent").onclick = async () => {
       progress(2, 90, "Revisando que el mismo error tenga la misma nota en toda la clase…");
       const evs = S.items.map(it => it.ev);
       const sec = {};
-      for (const it of S.items) { sec[it.ev.student] = {}; for (const blk of evidenceMd(it.ev).split(/\n(?=## Q\d+ )/)) { const m = /^## Q(\d+) /.exec(blk); if (m) sec[it.ev.student][+m[1]] = blk; } }
+      for (const it of S.items) { sec[it.ev.student] = {}; for (const blk of A.evidenceMd(it.ev).split(/\n(?=## Q\d+ )/)) { const m = /^## Q(\d+) /.exec(blk); if (m) sec[it.ev.student][+m[1]] = blk; } }
       try {
-        const cal = await calibrate(client, {system, evidences: evs, decisions: S.decisions, sectionsOf: st => sec[st]});
+        const cal = await calibrate(client, {system, evidences: evs, decisions: S.decisions, sectionsOf: st => sec[st], cfg: A.agent});
         if (cal.usage) S.usage.push(cal.usage);
         S.calibration = cal;
       } catch (e) { S.calibration = {changes: [], notes: "calibration skipped: " + e.message}; }
@@ -215,14 +243,13 @@ async function buildOutputs(mode) {
   const out = [];
   for (const it of S.items) {
     const final = finalOf(it);
-    const scores = Array.from({length: 14}, (_, i) => final[i + 1].score);
-    const grade = Math.round(scores.reduce((a, b) => a + b, 0) / 14 * 10 * 100) / 100;
+    const grade = A.grade(final);
     const source = S.decisions[it.ev.student] ? "agent" : "rules";
     const row = {student: it.ev.student, id: it.ev.id, file: it.file, score: grade, source, final, it};
     if (mode === "final") {
-      const {bytes, info} = await writeWorkbook(JSZip, it.data, it.ev._sub, final);
+      const {bytes, info} = await A.writeWorkbook(JSZip, it.data, it.ev._sub, final);
       if (Math.abs(info.grade100 - grade) > 1e-9) throw new Error(`grade mismatch for ${it.ev.student}`);
-      Object.assign(row, {bytes, info, just: justificationMd(it.ev, final, source, info, grade, S.decisions[it.ev.student]?._meta || {})});
+      Object.assign(row, {bytes, info, just: A.justificationMd(it.ev, final, source, info, grade, S.decisions[it.ev.student]?._meta || {})});
     }
     out.push(row);
   }
@@ -239,7 +266,7 @@ function renderResults() {
   $("#rows").innerHTML = rows.length ? rows.map((r, i) => `<tr>
     <td class="name">${esc(r.student)}${r.source === "rules" ? ' <span class="badge b-nil" title="Propuesta automática del motor, sin agente">auto</span>' : ""}</td>
     <td><span class="grade badge ${r.score >= 70 ? "b-ok" : r.score >= 50 ? "b-mid" : "b-bad"}">${fmt(r.score)}</span></td>
-    <td><div class="cells">${Array.from({length: 14}, (_, k) => { const q = r.final[k + 1]; return `<div class="c ${cls(q.score, q.verdict)}" data-s="${esc(r.student)}" data-q="${k + 1}">${q.verdict === "blank" ? "–" : String(q.score).replace(".", ",")}</div>`; }).join("")}</div></td>
+    <td><div class="cells">${Array.from({length: A.nq}, (_, k) => { const q = r.final[k + 1]; return `<div class="c ${cls(q.score, q.verdict)}" data-s="${esc(r.student)}" data-q="${k + 1}">${q.verdict === "blank" ? "–" : String(q.score).replace(".", ",")}</div>`; }).join("")}</div></td>
     <td style="white-space:nowrap"><button class="ghost small" data-just="${esc(r.student)}">Justificación</button> <button class="ghost small" data-xl="${esc(r.student)}" ${r.bytes ? "" : "disabled"}>Excel</button></td></tr>`).join("")
     : '<tr><td colspan="4" class="empty">Arrastra el zip de Canvas para empezar.</td></tr>';
 }
@@ -248,7 +275,7 @@ const tip = $("#tip");
 $("#rows").addEventListener("mouseover", e => {
   const c = e.target.closest(".c"); if (!c) { tip.style.opacity = 0; return; }
   const q = byStudent(c.dataset.s).final[c.dataset.q];
-  tip.innerHTML = `<b>Q${c.dataset.q} · ${String(q.score).replace(".", ",")}/10</b><br>${esc(q.comment)}`;
+  tip.innerHTML = `<b>Q${c.dataset.q} · ${String(q.score).replace(".", ",")}/10</b><br>${esc(q.comment)}` + (q.fix ? `<br><i>Corrección:</i> ${esc(q.fix)}` : "");
   const r = c.getBoundingClientRect();
   tip.style.left = Math.min(r.left, innerWidth - 400) + "px"; tip.style.top = (r.bottom + 8) + "px"; tip.style.opacity = 1;
 });
@@ -261,7 +288,7 @@ $("#rows").addEventListener("click", e => {
 });
 function showJust(student, q) {
   const r = byStudent(student);
-  const md = r.just || justificationMd(r.it.ev, r.final, r.source, {grade_cell: "-", points_col: "-", comment_col: "-"}, r.score, S.decisions[student]?._meta || {});
+  const md = r.just || A.justificationMd(r.it.ev, r.final, r.source, {grade_cell: "-", points_col: "-", comment_col: "-"}, r.score, S.decisions[student]?._meta || {});
   $("#md").innerHTML = md2html(md); $("#modal").classList.add("open");
   if (q) setTimeout(() => { const h = document.getElementById("jq" + q); if (h) $("#modal").scrollTop = h.offsetTop - 20; }, 30);
 }
@@ -292,9 +319,9 @@ function download(blob, name) {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
 }
-const assignment = () => $("#asgName").value.trim() || "Quiz 1";
-const feedbackLines = r => [`${assignment()}: ${r.score.toFixed(2)}/100`, ...Array.from({length: 14}, (_, k) => `Q${k + 1} (${r.final[k + 1].score}/10): ${r.final[k + 1].comment}`),
-  ...(r.final.summary ? ["Overall: " + r.final.summary] : []), "Your corrected workbook is attached: points and the reason for each question are in the correction table (columns 'points' and 'comment')."].join("\n");
+const assignment = () => $("#asgName").value.trim() || A.title;
+const feedbackLines = r => [`${assignment()}: ${r.score.toFixed(2)}/100`, ...Array.from({length: A.nq}, (_, k) => `Q${k + 1} (${r.final[k + 1].score}/10): ${r.final[k + 1].comment}` + (r.final[k + 1].fix ? ` Fix: ${r.final[k + 1].fix}` : "")),
+  ...(r.final.summary ? ["Overall: " + r.final.summary] : []), A.fix ? "Your corrected workbook is attached: the grade, the reason and the correction for each question are in the correction table (columns Grade, Comment, Correction)." : "Your corrected workbook is attached: points and the reason for each question are in the correction table (columns 'points' and 'comment')."].join("\n");
 function canvasCsv() {
   const id = $("#asgId").value.trim(), pts = +$("#asgPts").value || 100;
   const col = id ? `${assignment()} (${id})` : assignment();
@@ -304,18 +331,18 @@ function canvasCsv() {
 $("#dlExcel").onclick = async () => {
   const z = new JSZip();
   for (const r of S.results) if (r.bytes) z.file(r.file, r.bytes);
-  download(await z.generateAsync({type: "blob", compression: "DEFLATE"}), "Quiz_feedback_files.zip"); S.downloaded = true;
+  download(await z.generateAsync({type: "blob", compression: "DEFLATE"}), A.zip); S.downloaded = true;
 };
 $("#dlCsv").onclick = () => download(new Blob([canvasCsv()], {type: "text/csv"}), "canvas_gradebook_import.csv");
 $("#dlAll").onclick = async () => {
   const z = new JSZip();
   z.file("canvas_gradebook_import.csv", canvasCsv());
-  z.file("grades.csv", toCsv([["student", "id", "score", ...Array.from({length: 14}, (_, k) => `Q${k + 1}`), "source", "file"],
-    ...S.results.map(r => [r.student, r.id, r.score, ...Array.from({length: 14}, (_, k) => r.final[k + 1].score), r.source, r.file])]));
+  z.file("grades.csv", toCsv([["student", "id", "score", ...Array.from({length: A.nq}, (_, k) => `Q${k + 1}`), "source", "file"],
+    ...S.results.map(r => [r.student, r.id, r.score, ...Array.from({length: A.nq}, (_, k) => r.final[k + 1].score), r.source, r.file])]));
   z.file("grades_with_feedback.csv", toCsv([["student", "id", "score", "feedback"], ...S.results.map(r => [r.student, r.id, r.score, feedbackLines(r)])]));
   for (const r of S.results) {
     if (r.just) z.file(`justifications/${r.student}.md`, r.just);
-    z.file(`evidence/${r.student}.md`, evidenceMd(r.it.ev));
+    z.file(`evidence/${r.student}.md`, A.evidenceMd(r.it.ev));
     if (S.decisions[r.student]) z.file(`decisions/${r.student}.json`, JSON.stringify({student: r.student, ...S.decisions[r.student]}, null, 1));
   }
   const sc = S.results.map(r => r.score);
@@ -325,4 +352,12 @@ $("#dlAll").onclick = async () => {
 };
 window.addEventListener("beforeunload", e => { if (!S.downloaded) { e.preventDefault(); e.returnValue = ""; } });
 
-renderKey(); refreshButtons(); renderResults();
+function setAssignmentUi() {
+  $("#qh").innerHTML = Array.from({length: A.nq}, (_, k) => `<span title="peso ${Math.round(A.weights[k] * 1000) / 10}%">Q${k + 1}</span>`).join("");
+  const n = $("#asgName");
+  if (!n.dataset.edited) n.value = A.title;
+  $("#asgNow").textContent = A.title;
+}
+$("#asgName").addEventListener("input", e => { e.target.dataset.edited = "1"; });
+$("#asgSel").onchange = () => { if (S.file && !S.running) loadZip(S.file); };
+setAssignmentUi(); renderKey(); refreshButtons(); renderResults();

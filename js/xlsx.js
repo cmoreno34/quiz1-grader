@@ -75,8 +75,15 @@ export async function readWorkbook(JSZip, data, sheetName = "Data&Q") {
   if (!wb || !rels) throw new Error("not an .xlsx workbook");
   const sheets = [...wb.matchAll(/<sheet\b[^>]*\/>/g)].map(m => m[0]);
   const names = sheets.map(t => unescapeXml(attr(t, "name") || ""));
-  const tag = sheets.find(t => unescapeXml(attr(t, "name") || "") === sheetName);
-  if (!tag) throw new Error(`no sheet '${sheetName}' (sheets: ${names.join(", ")})`);
+  // sheetName: one name, or a list of accepted names (first match wins, then a case- and
+  // space-insensitive match)
+  const wanted = Array.isArray(sheetName) ? sheetName : [sheetName];
+  const norm = s => s.toLowerCase().replace(/\s+/g, "");
+  let tag = null;
+  for (const w of wanted) { tag = sheets.find(t => unescapeXml(attr(t, "name") || "") === w); if (tag) break; }
+  if (!tag) for (const w of wanted) { tag = sheets.find(t => norm(unescapeXml(attr(t, "name") || "")) === norm(w)); if (tag) break; }
+  if (!tag) throw new Error(`no sheet '${wanted.join("' or '")}' (sheets: ${names.join(", ")})`);
+  const sheetTitle = unescapeXml(attr(tag, "name") || "");
   const rid = attr(tag, "r:id");
   const rel = [...rels.matchAll(/<Relationship\b[^>]*\/>/g)].map(m => m[0]).find(t => attr(t, "Id") === rid);
   let target = attr(rel, "Target");
@@ -133,8 +140,8 @@ export async function readWorkbook(JSZip, data, sheetName = "Data&Q") {
     }
     if (typeof v === "number" && isDateFormat(nf)) v = new XDate(v);
     if (f === null && v === null && !s) continue;
-    cells.set(r * 16384 + c, {f, v, nf, t});
+    cells.set(r * 16384 + c, {f, v, nf, t, s: +(s || 0)});
     if (f !== null || (v !== null && v !== "")) { if (r > maxRow) maxRow = r; if (c > maxCol) maxCol = c; }
   }
-  return {zip, sheetPath, cells, maxRow, maxCol, sheetNames: names};
+  return {zip, sheetPath, cells, maxRow, maxCol, sheetNames: names, sheetTitle, sheetXml: sx, stylesXml: stXml};
 }

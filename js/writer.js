@@ -2,8 +2,8 @@
 // edited (points 0-10 coloured, a 'comment' column right beside them, GRADE /100 and the
 // overall summary).  String-level XML edits: every other part of the file is copied as is.
 // Port of write_workbook() in _tools/quiz1_agent.py.
-import {colLetter as COL, colIndex as CIDX, unescapeXml} from "./xlsx.js?v=2";
-import {num, close, evidenceMd} from "./engine.js?v=2";
+import {colLetter as COL, colIndex as CIDX, unescapeXml} from "./xlsx.js?v=4";
+import {num, close, evidenceMd} from "./engine.js?v=4";
 
 const GREEN = "FFC6EFCE", AMBER = "FFFFEB9C", RED = "FFFFC7CE";
 const esc = s => String(s).replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, "")
@@ -14,7 +14,7 @@ const setAttr = (tag, n, v) => new RegExp(`\\b${n}="[^"]*"`).test(tag) ? tag.rep
 const delAttr = (tag, n) => tag.replace(new RegExp(`\\s${n}="[^"]*"`), "");
 const fmtNum = v => String(Number.isInteger(v) ? v : +v.toPrecision(15));
 
-class Sheet {
+export class Sheet {
   constructor(xml) { this.xml = xml; this.maxCol = 0; this.droppedFormula = false; }
   rowSpan(r) {
     const re = new RegExp(`<row\\b(?=[^>]*\\sr="${r}")[^>]*?(\\/?)>`);
@@ -94,7 +94,7 @@ class Sheet {
   }
 }
 
-function addFillStyles(stylesXml, baseXf) {
+export function addFillStyles(stylesXml, baseXf) {
   const fills = stylesXml.match(/<fills\b[^>]*>([\s\S]*?)<\/fills>/);
   let nFills = (fills[1].match(/<fill\b/g) || []).length;
   const newFills = [GREEN, AMBER, RED].map(rgb => `<fill><patternFill patternType="solid"><fgColor rgb="${rgb}"/><bgColor indexed="64"/></patternFill></fill>`);

@@ -1,6 +1,7 @@
-# Corrector del Quiz 1 (BTM-2500)
+# Corrector BTM-2500 (Quiz 1 y Homework 1)
 
-Página web estática (GitHub Pages) que corrige el Quiz 1 de Excel con un agente de Claude.
+Página web estática (GitHub Pages) que corrige el Quiz 1 y el Homework 1 de Excel con un agente de Claude.
+La tarea se detecta sola por la hoja del Excel (`Data&Q` = Quiz 1, `quiz1#` = Homework 1); también se puede elegir en el menú «Tarea».
 **Todo se procesa en el navegador**: los Excel de los alumnos no se suben a ningún servidor;
 a la API de Anthropic solo se envía, con la clave del profesor, el informe de evidencias de
 cada alumno.
@@ -16,7 +17,9 @@ cada alumno.
    Submissions*; y el **CSV de notas** → Canvas ▸ Grades ▸ *Import*.
 
 Cada Excel devuelto es el original del alumno: solo cambia la tabla de corrección (nota 0–10
-por pregunta, comentario con el porqué justo al lado y GRADE /100).
+por pregunta, comentario con el porqué justo al lado y GRADE /100). En el Homework 1 se añade
+además una columna «Correction (how to fix it)» con la fórmula corregida (columnas Z, AC, AD; nota
+ponderada con los pesos de la columna AA).
 
 ## Qué hay dentro
 
@@ -26,6 +29,7 @@ por pregunta, comentario con el porqué justo al lado y GRADE /100).
 | `js/engine.js` | Motor de evidencias: recalcula cada respuesta desde los datos, clasifica cada celda (fórmula / a mano / error arrastrado / fila desplazada / error típico…) |
 | `js/agent.js` | Agente Claude (`claude-opus-5-5`): nota y justificación por pregunta, calibración de la clase |
 | `js/writer.js` | Escribe la tabla de corrección en el Excel original |
-| `js/rubric.js` | Rúbrica (sin respuestas: se calculan al vuelo con los datos de cada clase) |
+| `js/rubric.js` | Rúbrica del Quiz 1 (sin respuestas: se calculan al vuelo con los datos de cada clase) |
+| `js/hw1.js` | Homework 1: motor de evidencias, rúbrica y escritura de la tabla de corrección (sin fórmulas modelo) |
 
 Ponle a la clave un **límite de gasto** (console.anthropic.com ▸ Workspaces ▸ Limits).
